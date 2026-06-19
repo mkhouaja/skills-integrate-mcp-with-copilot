@@ -5,6 +5,7 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -19,8 +20,11 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
 
-# In-memory activity database
-activities = {
+data_dir = current_dir / "data"
+activities_file = data_dir / "activities.json"
+
+# Default activity data used to seed the JSON file on first run.
+default_activities = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -78,6 +82,29 @@ activities = {
 }
 
 
+def load_activities():
+    """Load activities from disk, seeding the file if needed."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    if activities_file.exists():
+        with activities_file.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    save_activities(default_activities)
+    return default_activities
+
+
+def save_activities(activities_data):
+    """Persist the current activity state to disk."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    with activities_file.open("w", encoding="utf-8") as file:
+        json.dump(activities_data, file, indent=2)
+
+
+activities = load_activities()
+
+
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html")
@@ -107,6 +134,7 @@ def signup_for_activity(activity_name: str, email: str):
 
     # Add student
     activity["participants"].append(email)
+    save_activities(activities)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
@@ -129,4 +157,5 @@ def unregister_from_activity(activity_name: str, email: str):
 
     # Remove student
     activity["participants"].remove(email)
+    save_activities(activities)
     return {"message": f"Unregistered {email} from {activity_name}"}
